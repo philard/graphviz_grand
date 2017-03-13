@@ -1,0 +1,444 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project
+  xmlns:if="ant:if"
+  xmlns:unless="ant:unless"
+  xmlns:ivy="antlib:org.apache.ivy.ant" name="EPMHBRS" basedir="." default="main">
+
+  <!-- enable the environment variables in global level -->
+  <property environment="env"/>
+  <property name="input.template" value="develop" unless:set="input.template"/>
+
+  <!-- Hybrid settings for multiple environments -->
+  <available property="localextensions.xml"          file="etc/localextensions.xml" type="file"/>
+  <available property="local.properties"             file="etc/local.properties" type="file"/>
+  <available property="local.development.properties" file="etc/local.development.properties" type="file"/>
+  <available property="local.testing.properties"     file="etc/local.testing.properties" type="file"/>
+  <available property="local.production.properties"  file="etc/local.production.properties" type="file"/>
+
+  <!-- local .git repository & git hook based workflow -->
+  <condition property="repository.exists">
+    <and>
+      <available file=".git" type="dir"/>
+      <available file=".workflow" type="dir"/>
+    </and>
+  </condition>
+
+  <condition property="ivy.settings">
+    <and>
+      <available file="etc/ivy.xml"         type="file" />
+      <available file="etc/ivysettings.xml" type="file" />
+    </and>
+  </condition>
+
+  <condition property="is.windows" description="check whether the platform is Windows">
+    <os family="windows" />
+  </condition>
+
+  <!--
+  ##########################################################################
+  # Default Hybrid Settings
+  ##########################################################################-->
+  <property name="platform"     value="${basedir}/bin/platform"/>
+  <property name="hybrid.pkg"   value="${env.HYBRId_PKG}" unless:set="hybrid.pkg"/>
+  <available property="hybrid.bin.exists"   file="bin/platform/build.number"/>
+  <condition property="hybrid.instance">
+    <and>
+      <available file="bin"     type="dir"/>
+      <available file="config"  type="dir"/>
+      <available file="data"    type="dir"/>
+      <available file="roles"   type="dir"/>
+      <available file="temp"    type="dir"/>
+    </and>
+  </condition>
+
+  <property name="solr.host"  value="localhost" unless:set="solr.host"/>
+  <property name="solr.port"  value="8983" unless:set="solr.port" />
+  <condition property="isSolrRunning" else="false">
+    <socket server="${solr.host}" port="${solr.port}"/>
+  </condition>
+
+  <!-- When we need to run initialize after build -->
+  <condition property="hybrid.initialize">
+    <and>
+      <isset property="hybrid.init"/>
+      <istrue value="${hybrid.init}"/>
+    </and>
+  </condition>
+
+  <target name="main" description="synonyms to ${platform} clean all">
+    <antcall target="clean" />
+    <antcall target="all" />
+  </target>
+
+  <target name="purge" description="purge all generated files/data &amp; reset the intance back to zeor">
+    <echo message="Starting purging the entire Hybrid instance..."/>
+    <echo message="----------------------------------------------------------------------"/>
+    <delete dir="${basedir}/config"/>
+    <delete dir="${basedir}/bin"/>
+    <delete dir="${basedir}/data"/>
+    <delete dir="${basedir}/lib"/>
+    <delete dir="${basedir}/log"/>
+    <delete dir="${basedir}/roles"/>
+    <delete dir="${basedir}/temp"/>
+    <delete file="${basedir}/velocity.log"/>
+  </target>
+
+  <!--
+  ##########################################################################
+  # Shortcuts to default Hybrid platform ant tasks.
+  ##########################################################################-->
+  <target name="clean" description="${platform} clean">
+    <ant dir="${platform}" target="clean" />
+  </target>
+
+  <target name="all" description="${platform} all">
+    <antcall target="updateHybridSettings" />
+    <ant dir="${platform}" target="all" />
+    <antcall target="lint" if:set="ivy.settings" unless:set="hybrid.env"/>
+  </target>
+
+  <target name="addoninstall" description="${platform} addoninstall">
+    <ant dir="${platform}" target="addoninstall" />
+  </target>
+
+  <target name="extgen" description="${plaform} extgen">
+    <ant dir="${platform}" target="extgen" />
+  </target>
+
+  <target name="initialize" description="${platform} initialize">
+    <ant dir="${platform}" target="initialize" />
+  </target>
+
+  <target name="startAdminServer" description="${platform} startAdminServer">
+    <ant dir="${platform}" target="startAdminServer" />
+  </target>
+
+  <target name="startHybridServer" description="${platform} startHybridServer">
+    <antcall target="startSolrServer"/>
+    <ant dir="${platform}" target="startHybridServer" />
+  </target>
+
+  <target name="startHybridAsDaemon"
+    depends="startSolrServer"
+    unless="is.windows"
+    description="Start hybrid server in non-Windows OS in background">
+
+    <exec dir="${basedir}/bin/platform/tomcat/bin" executable="sh">
+      <arg line="wrapper.sh start" />
+    </exec>
+  </target>
+
+  <target name="stopHybridAsDaemon"
+    unless="is.windows"
+    description="Stop hybrid server in non-Windows OS in background">
+
+    <exec dir="${basedir}/bin/platform/tomcat/bin" executable="sh">
+      <arg line="wrapper.sh stop" />
+    </exec>
+  </target>
+
+  <target name="startSolrServer"
+    unless="${isSolrRunning}"
+    description="${platform} startSolrServer">
+
+    <ant dir="${platform}" target="startSolrServer">
+      <property name="instance.port" value="${solr.port}" />
+    </ant>
+  </target>
+
+  <target name="stopSolrServer"
+    if="${isSolrRunning}"
+    description="${platform} stopSolrServer">
+
+    <ant dir="${platform}" target="stopSolrServer" >
+      <property name="instance.port" value="${solr.port}" />
+    </ant>
+  </target>
+
+  <target name="updatesystem" description="${platform} updatesystem">
+    <ant dir="${platform}" target="updatesystem" />
+  </target>
+
+  <!--
+  ##########################################################################
+  # Hybrid Automations
+  ##########################################################################-->
+  <target name="activateWorkflow"
+    depends="deactivateWorkflow"
+    if="repository.exists"
+    description="activate GIT workflow">
+
+    <echo message="Activiating GIT workflow..."/>
+    <echo message="----------------------------------------------------------------------"/>
+    <copy file="${basedir}/.workflow/pre-commit" todir="${basedir}/.git/hooks"/>
+    <chmod file="${basedir}/.git/hooks/pre-commit" perm="ugo+rx"/>
+
+    <copy file="${basedir}/.workflow/prepare-commit-msg" todir="${basedir}/.git/hooks"/>
+    <chmod file="${basedir}/.git/hooks/prepare-commit-msg" perm="ugo+rx"/>
+  </target>
+
+  <target name="deactivateWorkflow"
+    if="repository.exists"
+    description="deactivate GIT workflow">
+
+    <echo message="Deactivating GIT workflow..."/>
+    <echo message="----------------------------------------------------------------------"/>
+    <delete file="${basedir}/.git/hooks/pre-commit"/>
+    <delete file="${basedir}/.git/hooks/prepare-commit-msg"/>
+  </target>
+
+  <target name="checkHybridVersion" description="ensure there is a valid Hybrid package">
+    <echo message="Checking Hybrid Environment..."/>
+    <echo message="----------------------------------------------------------------------"/>
+    <fail unless="hybrid.pkg" message="'Missing env:HYBRId_PKG or -Dhybrid.pkg"/>
+    <!-- try load Hybrid build -->
+    <loadproperties srcfile="${hybrid.pkg}/bin/platform/build.number"/>
+    <echo message="| Hybrid Version: ${version}"/>
+    <echo message="| API Version: ${version.api}"/>
+    <echo message="| Release Date: ${releasedate}"/>
+    <echo message="----------------------------------------------------------------------"/>
+  </target>
+
+
+  <!-- create initial settings with best practices -->
+  <macrodef name="_createLocalProperties">
+    <attribute name="filename" default="etc/local.properties" />
+
+    <sequential>
+      <echo file="@{filename}"/>
+      <propertyfile
+          file="@{filename}"
+          comment="@{filename} settings">
+
+        <entry key="build.parallel" value="true" />
+        <entry key="solrserver.instances.default.autostart" value="false" />
+        <entry key="solrserver.instances.default.port" value="8983" />
+
+        <entry key="tomcat.http.port" value="9001"/>
+        <entry key="tomcat.ssl.port" value="9002"/>
+        <entry key="tomcat.jmx.port" value="9003"/>
+        <entry key="tomcat.jmx.server.port" value="9004"/>
+
+        <entry key="yacceleratorstorefront.webroot" value="/store" />
+        <entry key="storefrontContextRoot" value="/store" />
+      </propertyfile>
+    </sequential>
+  </macrodef>
+
+  <!-- create initial local extensions (b2c, electronicsstore). -->
+  <macrodef name="_createLocalExtensions">
+    <sequential>
+<echo file="etc/localextensions.xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;hybridconfig
+  xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+  xsi:noNamespaceSchemaLocation=&quot;resources/schemas/extensions.xsd&quot;&gt;
+  &lt;extensions&gt;
+    &lt;path dir=&quot;${HYBRId_BIN_DIR}&quot; /&gt;
+    &lt;!-- Hybrid Fundamental Extensions --&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-commerce/solrserver&quot; /&gt;
+
+    &lt;!-- Hybrid Storefront &amp; Sample Data --&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-data/electronicsstore&quot;/&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-template/yacceleratorstorefront&quot; /&gt;
+  &lt;/extensions&gt;
+&lt;/hybridconfig&gt;
+</echo>
+    </sequential>
+  </macrodef>
+
+  <macrodef name="_createB2BLocalExtensions">
+    <sequential>
+<echo file="etc/localextensions.xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;hybridconfig
+  xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+  xsi:noNamespaceSchemaLocation=&quot;resources/schemas/extensions.xsd&quot;&gt;
+  &lt;extensions&gt;
+    &lt;path dir=&quot;${HYBRId_BIN_DIR}&quot; /&gt;
+    &lt;!-- Fundamental Supports --&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-commerce/solrserver&quot; /&gt;
+
+    &lt;!-- Storefront &amp; Sample Data --&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-data/powertoolsstore&quot;/&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-template/yacceleratorfulfilmentprocess&quot; /&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-template/yacceleratorstorefront&quot;/&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-addon/b2bacceleratoraddon&quot;/&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-addon/commerceorgaddon&quot;/&gt;
+
+    &lt;!-- B2B Backoffice --&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-cockpit/mcc&quot; /&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-commerce/b2badmincockpit&quot;/&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-platform-backoffice/platformbackoffice&quot; /&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-backoffice/commerceservicesbackoffice&quot; /&gt;
+    &lt;extension dir=&quot;${HYBRId_BIN_DIR}/ext-backoffice/b2bcommercebackoffice&quot;/&gt;
+  &lt;/extensions&gt;
+&lt;/hybridconfig&gt;
+</echo>
+    </sequential>
+  </macrodef>
+
+  <target name="createInitialSettings">
+    <!-- default settings -->
+    <echo message="Start creating initial settings" />
+    <echo message="----------------------------------------------------------------------"/>
+    <ant dir="${platform}" target="all" unless:set="hybrid.instance"/>
+    <_createLocalProperties unless:set="local.properties" />
+    <_createLocalExtensions unless:set="localextensions.xml"/>
+    <!-- additional environment settings -->
+    <_createLocalProperties filename="etc/local.development.properties" unless:set="local.development.properties"/>
+    <_createLocalProperties filename="etc/local.testing.properties" unless:set="local.testing.properties"/>
+    <_createLocalProperties filename="etc/local.production.properties" unless:set="local.production.properties"/>
+  </target>
+
+  <target name="selectHybridEnv" description="select environment settings for Hybrid via -Dhybrid.env. (default: local.properties)">
+    <property name="hybrid.env.settings" value="local.${hybrid.env}.properties" if:set="hybrid.env" />
+    <property name="hybrid.env.settings" value="local.properties" unless:set="hybrid.env" />
+
+    <fail message="${hybrid.env.settings} not found">
+      <condition>
+        <not>
+          <available file="etc/${hybrid.env.settings}"/>
+        </not>
+      </condition>
+    </fail>
+  </target>
+
+  <target name="prepareHybridSettings"
+    depends="createInitialSettings,selectHybridEnv"
+    description="unify all Hybrid settings into etc folder">
+    <echo message="Settings Hybrid Environment (${hybrid.env.settings})"/>
+    <echo message="----------------------------------------------------------------------"/>
+    <copy file="etc/${hybrid.env.settings}"  tofile="config/local.properties" overwrite="true"/>
+    <copy file="etc/localextensions.xml"     tofile="config/localextensions.xml" overwrite="true"/>
+  </target>
+
+  <target name="updateHybridSettings"
+    depends="selectHybridEnv"
+    if="hybrid.env.settings"
+    description="update Hybrid environmental settings">
+    <echo message="Updating Hybrid Environment (${hybrid.env.settings})"/>
+    <echo message="----------------------------------------------------------------------"/>
+    <copy file="etc/${hybrid.env.settings}"  tofile="config/local.properties" overwrite="true"/>
+    <copy file="etc/localextensions.xml"     tofile="config/localextensions.xml" overwrite="true"/>
+  </target>
+
+  <target name="copyHybridPackages"
+    unless="hybrid.bin.exists"
+    description="copy hybrid binary packages into base dir">
+    <copy todir="${basedir}/bin">
+      <fileset dir="${hybrid.pkg}/bin"/>
+    </copy>
+  </target>
+
+  <!-- TODO jim_zhan@epam.com -->
+  <target name="new"
+    description="create a blank new Hybrid instance">
+    <echo message="Creating a Hybrid instance..."/>
+    <echo message="----------------------------------------------------------------------"/>
+    <input message="Choose A Hybrid storefront:${line.separator}
+1. yacceleratorstorefront (electronicsstore)${line.separator}
+2. yacceleratorstorefront + b2bacceleratoraddon"
+      validargs="1,2"
+      addproperty="hybrid.accelerator"/>
+
+    <condition property="b2c.accelerator.electronicsstore">
+      <equals arg1="${hybrid.accelerator}" arg2="1" />
+    </condition>
+
+    <condition property="b2b.accelerator.powertools">
+      <equals arg1="${hybrid.accelerator}" arg2="2" />
+    </condition>
+
+  </target>
+
+  <target name="setup"
+    depends="checkHybridVersion,activateWorkflow"
+    description="setup a Hybrid instance">
+
+    <echo message="Setting up a Hybrid instance..."/>
+    <echo message="----------------------------------------------------------------------"/>
+
+    <antcall target="copyHybridPackages"/>
+    <antcall target="prepareHybridSettings" />
+    <!-- rebuild the instance using existing configurations -->
+    <antcall target="clean"/>
+    <antcall target="all" />
+  </target>
+
+  <target name="lint"
+    depends="_initCheckstyle"
+    description="Generates a report of code convention violations.">
+
+    <property name="check.base.dir" value="src" />
+    <!-- See http://checkstyle.sourceforge.net/anttask.html for full options of using checkstyle with ant-->
+    <checkstyle config="etc/google_checks.xml"
+              failureProperty="checkstyle.failure"
+              failOnViolation="false">
+      <formatter type="plain"/>
+      <formatter type="xml" tofile="checkstyle_report.xml"/>
+      <fileset dir="${check.base.dir}">
+        <include name="*/acceleratoraddon/**/*.java"/>
+        <include name="*/src/**/*.java"/>
+        <include name="*/testsrc/**"/>
+        <!-- exclude Hybrid generated files -->
+        <exclude name="**/setup/InitialDataSystemSetup.java" />
+        <exclude name="**/*Constants.java"/>
+        <exclude name="**/*Standalone.java" />
+        <exclude name="**/jalo/**/*.java" />
+        <exclude name="**/gensrc/**" />
+      </fileset>
+    </checkstyle>
+  </target>
+
+  <!--
+  ##########################################################################
+  # Ivy Settings
+  ##########################################################################
+   -->
+  <target name="_initCheckstyle" depends="_resolveIvyDeps">
+    <path id="checkstyle.lib.path">
+      <fileset dir="lib" includes="*.jar"/>
+    </path>
+    <!-- Sevntu custom checks are retrieved by Ivy into lib folder and will be accessible to checkstyle-->
+    <taskdef resource="com/puppycrawl/tools/checkstyle/ant/checkstyle-ant-task.properties" classpathref="checkstyle.lib.path"/>
+  </target>
+
+  <target name="_resolveIvyDeps" description="retrieve dependencies with ivy" depends="_initIvy" if:set="ivy.settings">
+    <ivy:settings file="${basedir}/etc/ivysettings.xml"/>
+    <ivy:retrieve/>
+  </target>
+  <!--
+  ##########################################################################
+  ####### Downloading and setup Ivy for managing dependencies ##############
+  ##########################################################################-->
+  <property name="ivy.install.version" value="2.1.0-rc2" />
+  <property name="ivy.dep.file" value="${basedir}/etc/ivy.xml" />
+  <!-- You may place ivy.jar into other folder if you want to keep folder lib clean-->
+  <property name="ivy.jar.dir" value="lib" />
+  <property name="ivy.jar.file" value="${ivy.jar.dir}/ivy.jar" />
+
+  <target name="_checkIvy">
+    <available file="${basedir}/lib/ivy.jar" property="ivy.present"/>
+  </target>
+
+  <target name="_downloadIvy" depends="_checkIvy" unless="ivy.present">
+    <mkdir dir="${ivy.jar.dir}"/>
+      <!-- download Ivy from web site so that it can be used even without any special installation -->
+      <get src="http://repo2.maven.org/maven2/org/apache/ivy/ivy/${ivy.install.version}/ivy-${ivy.install.version}.jar"
+             dest="${ivy.jar.file}" usetimestamp="true"/>
+  </target>
+
+  <target name="_initIvy" depends="_downloadIvy">
+    <!--
+        try to load ivy here from ivy home, in case the user has not already dropped
+        it into ant's lib dir (note that the latter copy will always take precedence).
+         We will not fail as long as local lib dir exists (it may be empty) and
+         ivy is in at least one of ant's lib dir or the local lib dir. -->
+    <path id="ivy.lib.path">
+      <fileset dir="${ivy.jar.dir}" includes="*.jar"/>
+    </path>
+    <taskdef resource="org/apache/ivy/ant/antlib.xml"
+            uri="antlib:org.apache.ivy.ant"
+            classpathref="ivy.lib.path"/>
+  </target>
+
+</project>

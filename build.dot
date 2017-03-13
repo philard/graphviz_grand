@@ -1,0 +1,117 @@
+digraph "EPMHBRS" {
+graph [rankdir="LR"];
+node [fontsize="12"];
+edge [fontsize="10"];
+"main" [shape=octagon,fillcolor="yellow",style="filled,bold",fontname="Helvetica-Bold",comment="synonyms to ${platform} clean all"];
+"main" -> "clean" [label="1", fontsize="10",style="dotted"];
+"main" -> "all" [label="2", fontsize="10",style="dotted"];
+
+"initialize" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} initialize"];
+"initialize" -> "[initialize]" [fontsize="10",style="dotted"];
+
+"updateHybridSettings" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="update Hybrid environmental settings"];
+"updateHybridSettings" -> "selectHybridEnv";
+
+"all" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} all"];
+"all" -> "updateHybridSettings" [label="1", fontsize="10",style="dotted"];
+"all" -> "[all]" [label="2", fontsize="10",style="dotted"];
+"all" -> "lint" [label="3", fontsize="10",style="dotted"];
+
+"lint" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="Generates a report of code convention violations."];
+"lint" -> "_initCheckstyle";
+
+"startHybridServer" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} startHybridServer"];
+"startHybridServer" -> "startSolrServer" [label="1", fontsize="10",style="dotted"];
+"startHybridServer" -> "[startHybridServer]" [label="2", fontsize="10",style="dotted"];
+
+"_initIvy"
+"_initIvy" -> "_downloadIvy";
+
+"deactivateWorkflow" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="deactivate GIT workflow"];
+
+"_checkIvy"
+
+"addoninstall" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} addoninstall"];
+"addoninstall" -> "[addoninstall]" [fontsize="10",style="dotted"];
+
+"_initCheckstyle"
+"_initCheckstyle" -> "_resolveIvyDeps";
+
+"startAdminServer" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} startAdminServer"];
+"startAdminServer" -> "[startAdminServer]" [fontsize="10",style="dotted"];
+
+"startSolrServer" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} startSolrServer"];
+"startSolrServer" -> "[startSolrServer]" [fontsize="10",style="dotted"];
+
+"stopHybridAsDaemon" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="Stop hybrid server in non-Windows OS in background"];
+
+"purge" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="purge all generated files/data & reset the intance back to zeor"];
+
+"_downloadIvy"
+"_downloadIvy" -> "_checkIvy";
+
+"checkHybridVersion" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="ensure there is a valid Hybrid package"];
+
+"setup" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="setup a Hybrid instance"];
+"setup" -> "checkHybridVersion" [label="1"];
+"setup" -> "activateWorkflow" [label="2"];
+"setup" -> "copyHybridPackages" [label="3", fontsize="10",style="dotted"];
+"setup" -> "prepareHybridSettings" [label="4", fontsize="10",style="dotted"];
+"setup" -> "clean" [label="5", fontsize="10",style="dotted"];
+"setup" -> "all" [label="6", fontsize="10",style="dotted"];
+
+"prepareHybridSettings" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="unify all Hybrid settings into etc folder"];
+"prepareHybridSettings" -> "createInitialSettings" [label="1"];
+"prepareHybridSettings" -> "selectHybridEnv" [label="2"];
+
+"updatesystem" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} updatesystem"];
+"updatesystem" -> "[updatesystem]" [fontsize="10",style="dotted"];
+
+"extgen" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${plaform} extgen"];
+"extgen" -> "[extgen]" [fontsize="10",style="dotted"];
+
+"_resolveIvyDeps" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="retrieve dependencies with ivy"];
+"_resolveIvyDeps" -> "_initIvy";
+
+"new" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="create a blank new Hybrid instance"];
+
+"activateWorkflow" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="activate GIT workflow"];
+"activateWorkflow" -> "deactivateWorkflow";
+
+"clean" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} clean"];
+"clean" -> "[clean]" [fontsize="10",style="dotted"];
+
+"selectHybridEnv" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="select environment settings for Hybrid via -Dhybrid.env. (default: local.properties)"];
+
+"stopSolrServer" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="${platform} stopSolrServer"];
+"stopSolrServer" -> "[stopSolrServer]" [fontsize="10",style="dotted"];
+
+"createInitialSettings"
+"createInitialSettings" -> "[all]" [fontsize="10",style="dotted"];
+
+"copyHybridPackages" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="copy hybrid binary packages into base dir"];
+
+"startHybridAsDaemon" [shape=box,fillcolor="limegreen",style="filled,bold",fontname="Times-Bold",comment="Start hybrid server in non-Windows OS in background"];
+"startHybridAsDaemon" -> "startSolrServer";
+
+"[initialize]" [color="gray",fontcolor="gray"];
+
+"[all]" [color="gray",fontcolor="gray"];
+
+"[startHybridServer]" [color="gray",fontcolor="gray"];
+
+"[addoninstall]" [color="gray",fontcolor="gray"];
+
+"[startAdminServer]" [color="gray",fontcolor="gray"];
+
+"[startSolrServer]" [color="gray",fontcolor="gray"];
+
+"[updatesystem]" [color="gray",fontcolor="gray"];
+
+"[extgen]" [color="gray",fontcolor="gray"];
+
+"[clean]" [color="gray",fontcolor="gray"];
+
+"[stopSolrServer]" [color="gray",fontcolor="gray"];
+
+}
